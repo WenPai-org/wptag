@@ -1,41 +1,16 @@
 <?php
 
-if (!defined('WP_UNINSTALL_PLUGIN')) {
+if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
     exit;
 }
 
-$settings = get_option('wptag_settings', []);
+delete_option( 'universal_tracking_codes_settings' );
 
-if (empty($settings['cleanup_on_uninstall'])) {
-    return;
+if ( is_multisite() ) {
+    $sites = get_sites();
+    foreach ( $sites as $site ) {
+        switch_to_blog( $site->blog_id );
+        delete_option( 'universal_tracking_codes_settings' );
+        restore_current_blog();
+    }
 }
-
-global $wpdb;
-
-$tables = [
-    $wpdb->prefix . 'wptag_snippets',
-    $wpdb->prefix . 'wptag_templates',
-    $wpdb->prefix . 'wptag_logs'
-];
-
-foreach ($tables as $table) {
-    $wpdb->query("DROP TABLE IF EXISTS {$table}");
-}
-
-$options = [
-    'wptag_db_version',
-    'wptag_settings',
-    'wptag_activated',
-    'wptag_cache_cleared'
-];
-
-foreach ($options as $option) {
-    delete_option($option);
-}
-
-delete_transient('wptag_admin_notice');
-
-wp_clear_scheduled_hook('wptag_cleanup_logs');
-wp_clear_scheduled_hook('wptag_cache_cleanup');
-
-wp_cache_flush();
