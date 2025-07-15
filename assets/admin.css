@@ -1,0 +1,374 @@
+.wptag-admin-wrap {
+    margin-top: 20px;
+}
+
+.wptag-header {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-bottom: 0;
+    padding: 20px;
+    margin-bottom: 0;
+}
+
+.wptag-header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+.wptag-header .page-title-action {
+    margin-left: 10px;
+}
+
+.wptag-content {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    padding: 20px;
+}
+
+.wptag-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.wptag-stat-card {
+    background: #f8f9fa;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+}
+
+.wptag-stat-card h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: #666;
+    font-weight: 400;
+}
+
+.wptag-stat-card .stat-value {
+    font-size: 32px;
+    font-weight: 600;
+    color: #2271b1;
+}
+
+.wptag-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+.wptag-table th,
+.wptag-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e2e4e7;
+}
+
+.wptag-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    color: #2c3338;
+}
+
+.wptag-table tbody tr:hover {
+    background: #f6f7f7;
+}
+
+.wptag-status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.wptag-status-badge.active {
+    background: #d4f4dd;
+    color: #00a32a;
+}
+
+.wptag-status-badge.inactive {
+    background: #f5e6e6;
+    color: #d63638;
+}
+
+.wptag-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.wptag-action-link {
+    color: #2271b1;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.wptag-action-link:hover {
+    color: #135e96;
+    text-decoration: underline;
+}
+
+.wptag-action-link.delete {
+    color: #d63638;
+}
+
+.wptag-action-link.delete:hover {
+    color: #a02222;
+}
+
+.wptag-form-table {
+    width: 100%;
+    max-width: 800px;
+}
+
+.wptag-form-table th {
+    width: 200px;
+    padding: 20px 10px 20px 0;
+    vertical-align: top;
+    text-align: left;
+    font-weight: 600;
+}
+
+.wptag-form-table td {
+    padding: 15px 10px;
+}
+
+.wptag-form-table input[type="text"],
+.wptag-form-table input[type="number"],
+.wptag-form-table select,
+.wptag-form-table textarea {
+    width: 100%;
+    max-width: 400px;
+}
+
+.wptag-code-editor {
+    width: 100%;
+    min-height: 300px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 13px;
+}
+
+.wptag-conditions-builder {
+    background: #f8f9fa;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+    padding: 20px;
+    margin-top: 10px;
+}
+
+.wptag-condition-group {
+    background: #fff;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.wptag-condition-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.wptag-condition-row select,
+.wptag-condition-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.wptag-templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.wptag-template-card {
+    background: #fff;
+    border: 1px solid #e2e4e7;
+    border-radius: 4px;
+    padding: 20px;
+    transition: box-shadow 0.2s;
+}
+
+.wptag-template-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.wptag-template-card h3 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    color: #2c3338;
+}
+
+.wptag-template-card p {
+    color: #666;
+    margin: 0 0 15px;
+    font-size: 14px;
+}
+
+.wptag-template-card .button {
+    width: 100%;
+    text-align: center;
+}
+
+.wptag-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100000;
+}
+
+.wptag-modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    border-radius: 4px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.wptag-modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #e2e4e7;
+}
+
+.wptag-modal-header h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.wptag-modal-body {
+    padding: 20px;
+}
+
+.wptag-modal-footer {
+    padding: 20px;
+    border-top: 1px solid #e2e4e7;
+    text-align: right;
+}
+
+.wptag-filters {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.wptag-filter-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.wptag-filter-item label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #2c3338;
+}
+
+.wptag-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.wptag-empty-state svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 20px;
+    opacity: 0.3;
+}
+
+.wptag-empty-state h3 {
+    font-size: 18px;
+    font-weight: 400;
+    margin: 0 0 10px;
+}
+
+.wptag-empty-state p {
+    margin: 0 0 20px;
+}
+
+.wptag-tabs {
+    display: flex;
+    border-bottom: 1px solid #e2e4e7;
+    margin: -20px -20px 20px;
+    padding: 0 20px;
+}
+
+.wptag-tab {
+    padding: 15px 20px;
+    border-bottom: 2px solid transparent;
+    text-decoration: none;
+    color: #2c3338;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.wptag-tab:hover {
+    color: #2271b1;
+}
+
+.wptag-tab.active {
+    color: #2271b1;
+    border-bottom-color: #2271b1;
+}
+
+.wptag-notice {
+    padding: 12px 20px;
+    margin: 20px 0;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.wptag-notice.info {
+    background: #e5f5fa;
+    color: #0073aa;
+}
+
+.wptag-notice.success {
+    background: #d4f4dd;
+    color: #00a32a;
+}
+
+.wptag-notice.warning {
+    background: #fcf9e8;
+    color: #996800;
+}
+
+.wptag-notice.error {
+    background: #f5e6e6;
+    color: #d63638;
+}
+
+@media screen and (max-width: 782px) {
+    .wptag-form-table th {
+        width: auto;
+        display: block;
+        padding-bottom: 5px;
+    }
+    
+    .wptag-filters {
+        flex-direction: column;
+    }
+    
+    .wptag-condition-row {
+        flex-direction: column;
+    }
+}
