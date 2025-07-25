@@ -182,12 +182,12 @@ amplitude.getInstance().init("{ID}");
             'matomo' => '<!-- Matomo -->
 <script type="text/javascript">
   var _paq = window._paq = window._paq || [];
-  _paq.push([\'trackPageView\']);
-  _paq.push([\'enableLinkTracking\']);
+  _paq.push(["trackPageView"]);
+  _paq.push(["enableLinkTracking"]);
   (function() {
     var u="//your-matomo-domain.com/";
-    _paq.push([\'setTrackerUrl\', u+"matomo.php"]);
-    _paq.push([\'setSiteId\', "{ID}"]);
+    _paq.push(["setTrackerUrl", u+"matomo.php"]);
+    _paq.push(["setSiteId", "{ID}"]);
     var d=document, g=d.createElement("script"), s=d.getElementsByTagName("script")[0];
     g.type="text/javascript"; g.async=true; g.src=u+"matomo.js"; s.parentNode.insertBefore(g,s);
   })();
@@ -196,26 +196,40 @@ amplitude.getInstance().init("{ID}");
     }
 
     public function get_codes_for_position($position) {
-        if (isset($this->cached_codes[$position])) {
-            return $this->cached_codes[$position];
+        $cache_key = $position . '_' . wp_cache_get_last_changed('wptag_codes');
+        
+        if (isset($this->cached_codes[$cache_key])) {
+            return $this->cached_codes[$cache_key];
         }
 
         $codes = array();
         $all_settings = $this->config->get_settings();
+
+        if (empty($all_settings)) {
+            return array();
+        }
 
         foreach ($all_settings as $service_key => $service_settings) {
             if (!$this->should_output_service($service_key, $service_settings, $position)) {
                 continue;
             }
 
-            $code = $this->get_service_code($service_key, $service_settings, $position);
-            if (!empty($code)) {
-                $priority = intval($service_settings['priority']);
-                $codes[$priority][] = array(
-                    'service' => $service_key,
-                    'code' => $code,
-                    'priority' => $priority
-                );
+            $service_codes = $this->get_service_codes($service_key, $service_settings, $position);
+            if (!empty($service_codes)) {
+                $priority = intval($service_settings['priority'] ?? 10);
+                if (!isset($codes[$priority])) {
+                    $codes[$priority] = array();
+                }
+                
+                foreach ($service_codes as $code) {
+                    if (!empty(trim($code))) {
+                        $codes[$priority][] = array(
+                            'service' => $service_key,
+                            'code' => $code,
+                            'priority' => $priority
+                        );
+                    }
+                }
             }
         }
 
@@ -228,20 +242,20 @@ amplitude.getInstance().init("{ID}");
             }
         }
 
-        $this->cached_codes[$position] = $output_codes;
+        $this->cached_codes[$cache_key] = $output_codes;
         return $output_codes;
     }
 
     private function should_output_service($service_key, $service_settings, $position) {
-        if (!$service_settings['enabled']) {
+        if (empty($service_settings['enabled'])) {
             return false;
         }
 
-        if ($service_settings['position'] !== $position) {
+        if (!$this->check_position_condition($service_key, $service_settings, $position)) {
             return false;
         }
 
-        if (!$this->check_device_condition($service_settings['device'])) {
+        if (!$this->check_device_condition($service_settings['device'] ?? 'all')) {
             return false;
         }
 
@@ -249,7 +263,33 @@ amplitude.getInstance().init("{ID}");
             return false;
         }
 
+        $service_config = $this->config->get_service_config($service_key);
+        if (!$service_config) {
+            return false;
+        }
+
+        if (!empty($service_settings['use_template'])) {
+            $field_key = $service_config['field'];
+            $id_value = trim($service_settings[$field_key] ?? '');
+            if (empty($id_value)) {
+                return false;
+            }
+        } else {
+            $custom_code = trim($service_settings['custom_code'] ?? '');
+            if (empty($custom_code)) {
+                return false;
+            }
+        }
+
         return apply_filters('wptag_should_output_service', true, $service_key, $service_settings, $position);
+    }
+
+    private function check_position_condition($service_key, $service_settings, $position) {
+        if ($service_key === 'google_tag_manager') {
+            return ($position === 'head' || $position === 'body');
+        }
+        
+        return $service_settings['position'] === $position;
     }
 
     private function check_device_condition($device_setting) {
@@ -372,40 +412,51 @@ amplitude.getInstance().init("{ID}");
         return $operator === 'is' ? $has_role : !$has_role;
     }
 
-    private function get_service_code($service_key, $service_settings, $position) {
-        if ($service_settings['use_template']) {
-            return $this->get_template_code($service_key, $service_settings, $position);
+    private function get_service_codes($service_key, $service_settings, $position) {
+        if (!empty($service_settings['use_template'])) {
+            return $this->get_template_codes($service_key, $service_settings, $position);
         } else {
-            return $service_settings['custom_code'];
+            $custom_code = trim($service_settings['custom_code'] ?? '');
+            if (!empty($custom_code)) {
+                return array($custom_code);
+            }
+            return array();
         }
     }
 
-    private function get_template_code($service_key, $service_settings, $position) {
+    private function get_template_codes($service_key, $service_settings, $position) {
         $service_config = $this->config->get_service_config($service_key);
         if (!$service_config) {
-            return '';
+            return array();
         }
 
-        $template = $this->get_template_for_service($service_key, $service_settings, $position);
-        if (empty($template)) {
-            return '';
+        $templates = $this->get_templates_for_service($service_key, $service_settings, $position);
+        if (empty($templates)) {
+            return array();
         }
 
         $field_key = $service_config['field'];
         $id_value = $service_settings[$field_key] ?? '';
         
         if (empty($id_value)) {
-            return '';
+            return array();
         }
 
-        $code = str_replace('{ID}', esc_attr($id_value), $template);
+        $codes = array();
+        foreach ($templates as $template) {
+            $code = str_replace('{ID}', esc_attr($id_value), $template);
+            $code = apply_filters('wptag_template_code', $code, $service_key, $service_settings, $position);
+            if (!empty($code)) {
+                $codes[] = $code;
+            }
+        }
         
-        return apply_filters('wptag_template_code', $code, $service_key, $service_settings, $position);
+        return $codes;
     }
 
-    private function get_template_for_service($service_key, $service_settings, $position) {
+    private function get_templates_for_service($service_key, $service_settings, $position) {
         if (!isset($this->templates[$service_key])) {
-            return '';
+            return array();
         }
 
         $template_data = $this->templates[$service_key];
@@ -416,51 +467,72 @@ amplitude.getInstance().init("{ID}");
             $id_value = $service_settings[$field_key] ?? '';
             
             if (strpos($id_value, 'G-') === 0) {
-                return $template_data['G-'];
+                return array($template_data['G-']);
             } elseif (strpos($id_value, 'UA-') === 0) {
-                return $template_data['UA-'];
+                return array($template_data['UA-']);
             }
             
-            return '';
+            return array();
         }
 
         if ($service_key === 'google_tag_manager') {
-            if ($position === 'head') {
-                return $template_data['head'];
-            } elseif ($position === 'body') {
-                return $template_data['body'];
+            if ($position === 'head' && isset($template_data['head'])) {
+                return array($template_data['head']);
+            } elseif ($position === 'body' && isset($template_data['body'])) {
+                return array($template_data['body']);
             }
             
-            return '';
+            return array();
         }
 
         if (is_array($template_data)) {
-            return $template_data['default'] ?? '';
+            if (isset($template_data['default'])) {
+                return array($template_data['default']);
+            }
+            return array();
         }
 
-        return $template_data;
+        return array($template_data);
     }
 
     public function output_codes($position) {
         $codes = $this->get_codes_for_position($position);
         
         if (empty($codes)) {
+            if (defined('WP_DEBUG') && WP_DEBUG && current_user_can('manage_options')) {
+                echo "\n<!-- WPTag Debug: No codes found for position: {$position} -->\n";
+            }
             return;
         }
 
         $output = "\n<!-- WPTag Codes - Position: {$position} -->\n";
         
-        foreach ($codes as $code) {
-            $output .= $code . "\n";
+        foreach ($codes as $index => $code) {
+            $output .= $code;
+            if ($index < count($codes) - 1) {
+                $output .= "\n";
+            }
         }
         
-        $output .= "<!-- End WPTag Codes -->\n";
+        $output .= "\n<!-- End WPTag Codes -->\n";
         
-        echo apply_filters('wptag_output_codes', $output, $position);
+        $final_output = apply_filters('wptag_output_codes', $output, $position, $codes);
+        
+        if (defined('WP_DEBUG') && WP_DEBUG && current_user_can('manage_options')) {
+            $debug_info = sprintf(
+                "\n<!-- WPTag Debug: %d codes output for position: %s -->\n",
+                count($codes),
+                $position
+            );
+            echo $debug_info;
+        }
+        
+        echo $final_output;
     }
 
     public function clear_cache() {
         $this->cached_codes = array();
+        wp_cache_set_last_changed('wptag_codes');
     }
 
     public function get_template_preview($service_key, $id_value) {
@@ -469,11 +541,79 @@ amplitude.getInstance().init("{ID}");
             return '';
         }
 
-        $template = $this->get_template_for_service($service_key, array($service_config['field'] => $id_value), 'head');
-        if (empty($template)) {
+        $fake_settings = array(
+            $service_config['field'] => $id_value,
+            'use_template' => true,
+            'enabled' => true,
+            'position' => 'head'
+        );
+
+        $templates = $this->get_templates_for_service($service_key, $fake_settings, 'head');
+        if (empty($templates)) {
             return '';
         }
 
-        return str_replace('{ID}', esc_attr($id_value), $template);
+        $preview_parts = array();
+        foreach ($templates as $template) {
+            $code = str_replace('{ID}', esc_attr($id_value), $template);
+            if (!empty($code)) {
+                $preview_parts[] = $code;
+            }
+        }
+
+        return implode("\n\n", $preview_parts);
+    }
+
+    public function get_service_stats() {
+        $stats = array(
+            'enabled_services' => 0,
+            'total_codes' => 0,
+            'by_position' => array(
+                'head' => 0,
+                'body' => 0,
+                'footer' => 0
+            ),
+            'by_type' => array(
+                'template' => 0,
+                'custom' => 0
+            )
+        );
+
+        $all_settings = $this->config->get_settings();
+        
+        foreach ($all_settings as $service_key => $service_settings) {
+            if (!empty($service_settings['enabled'])) {
+                $stats['enabled_services']++;
+                $stats['total_codes']++;
+                
+                $position = $service_settings['position'] ?? 'head';
+                if (isset($stats['by_position'][$position])) {
+                    $stats['by_position'][$position]++;
+                }
+                
+                if (!empty($service_settings['use_template'])) {
+                    $stats['by_type']['template']++;
+                } else {
+                    $stats['by_type']['custom']++;
+                }
+            }
+        }
+
+        return $stats;
+    }
+
+    public function validate_template($service_key, $id_value) {
+        $service_config = $this->config->get_service_config($service_key);
+        if (!$service_config) {
+            return false;
+        }
+
+        $fake_settings = array(
+            $service_config['field'] => $id_value,
+            'use_template' => true
+        );
+
+        $templates = $this->get_templates_for_service($service_key, $fake_settings, 'head');
+        return !empty($templates);
     }
 }

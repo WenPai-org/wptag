@@ -196,6 +196,8 @@ class Config {
                 'description' => 'Privacy-focused web analytics platform'
             )
         );
+
+        $this->services_config = apply_filters('wptag_services_config', $this->services_config);
     }
 
     public function get_all_services() {
@@ -204,23 +206,46 @@ class Config {
 
     public function get_enabled_services() {
         if (null === $this->cached_services) {
-            $this->cached_services = get_option($this->services_option, array('google_analytics', 'google_tag_manager', 'facebook_pixel', 'google_ads'));
+            $default_services = array('google_analytics', 'google_tag_manager', 'facebook_pixel', 'google_ads');
+            $this->cached_services = get_option($this->services_option, $default_services);
+            
+            if (!is_array($this->cached_services)) {
+                $this->cached_services = $default_services;
+            }
         }
         return $this->cached_services;
     }
 
     public function update_enabled_services($services) {
-        $this->cached_services = is_array($services) ? $services : array();
+        $services = is_array($services) ? array_filter($services) : array();
+        
+        $valid_services = array();
+        foreach ($services as $service_key) {
+            if (isset($this->services_config[$service_key])) {
+                $valid_services[] = $service_key;
+            }
+        }
+        
+        $this->cached_services = $valid_services;
         $result = update_option($this->services_option, $this->cached_services);
         
         if ($result) {
             $this->cached_settings = null;
+            wp_cache_delete('wptag_available_services', 'wptag');
+            do_action('wptag_enabled_services_updated', $this->cached_services);
         }
         
         return $result;
     }
 
     public function get_available_services() {
+        $cache_key = 'wptag_available_services';
+        $cached = wp_cache_get($cache_key, 'wptag');
+        
+        if (false !== $cached) {
+            return $cached;
+        }
+        
         $enabled_services = $this->get_enabled_services();
         $available = array();
         
@@ -230,6 +255,7 @@ class Config {
             }
         }
         
+        wp_cache_set($cache_key, $available, 'wptag', 3600);
         return $available;
     }
 
@@ -252,7 +278,7 @@ class Config {
         $available_services = $this->get_available_services();
         $categories = array();
         
-        foreach ($available_services as $service) {
+        foreach ($available_services as $service_key => $service) {
             if (!in_array($service['category'], $categories)) {
                 $categories[] = $service['category'];
             }
@@ -263,9 +289,35 @@ class Config {
 
     public function get_settings() {
         if (null === $this->cached_settings) {
-            $this->cached_settings = get_option($this->option_name, $this->get_default_settings());
+            $this->cached_settings = get_option($this->option_name, array());
+            
+            if (!is_array($this->cached_settings)) {
+                $this->cached_settings = array();
+            }
+            
+            $this->cached_settings = $this->merge_with_defaults($this->cached_settings);
         }
         return $this->cached_settings;
+    }
+
+    private function merge_with_defaults($settings) {
+        $available_services = $this->get_available_services();
+        $merged_settings = array();
+        
+        foreach ($available_services as $service_key => $service_config) {
+            if (isset($settings[$service_key]) && is_array($settings[$service_key])) {
+                $merged_settings[$service_key] = array_merge(
+                    $this->get_default_service_settings($service_key),
+                    $settings[$service_key]
+                );
+                
+                $merged_settings[$service_key]['updated_at'] = current_time('mysql');
+            } else {
+                $merged_settings[$service_key] = $this->get_default_service_settings($service_key);
+            }
+        }
+        
+        return $merged_settings;
     }
 
     public function get_service_settings($service_key) {
@@ -274,12 +326,24 @@ class Config {
     }
 
     public function update_settings($new_settings) {
+        if (!is_array($new_settings)) {
+            return false;
+        }
+        
         $sanitized_settings = $this->sanitize_settings($new_settings);
         $result = update_option($this->option_name, $sanitized_settings);
         
         if ($result) {
-            $this->cached_settings = $sanitized_settings;
+            $this->cached_settings = null;
+            wp_cache_delete('wptag_available_services', 'wptag');
+            wp_cache_set_last_changed('wptag_codes');
+            
+            if (function_exists('wp_cache_flush_group')) {
+                wp_cache_flush_group('wptag');
+            }
+            
             do_action('wptag_settings_updated', $sanitized_settings);
+            do_action('wptag_clear_cache');
         }
         
         return $result;
@@ -287,20 +351,9 @@ class Config {
 
     public function update_service_settings($service_key, $service_settings) {
         $all_settings = $this->get_settings();
-        $all_settings[$service_key] = $this->sanitize_service_settings($service_settings);
+        $all_settings[$service_key] = $this->sanitize_service_settings($service_settings, $service_key);
         
         return $this->update_settings($all_settings);
-    }
-
-    private function get_default_settings() {
-        $defaults = array();
-        $available_services = $this->get_available_services();
-        
-        foreach ($available_services as $service_key => $service_config) {
-            $defaults[$service_key] = $this->get_default_service_settings($service_key);
-        }
-        
-        return $defaults;
     }
 
     private function get_default_service_settings($service_key) {
@@ -323,91 +376,263 @@ class Config {
 
         $defaults[$service_config['field']] = '';
 
-        return $defaults;
+        return apply_filters('wptag_default_service_settings', $defaults, $service_key);
     }
 
     public function sanitize_settings($settings) {
-        $sanitized = array();
-        
         if (!is_array($settings)) {
-            return $this->get_default_settings();
+            return array();
         }
         
+        $sanitized = array();
+        
         foreach ($settings as $service_key => $service_settings) {
-            if (isset($this->services_config[$service_key])) {
-                $sanitized[$service_key] = $this->sanitize_service_settings($service_settings);
+            if (isset($this->services_config[$service_key]) && is_array($service_settings)) {
+                $sanitized[$service_key] = $this->sanitize_service_settings($service_settings, $service_key);
             }
         }
         
         return $sanitized;
     }
 
-    private function sanitize_service_settings($settings) {
+    private function sanitize_service_settings($settings, $service_key = '') {
+        if (!is_array($settings)) {
+            return $this->get_default_service_settings($service_key);
+        }
+        
+        $service_config = $this->get_service_config($service_key);
+        
         $sanitized = array(
             'enabled' => !empty($settings['enabled']),
             'use_template' => isset($settings['use_template']) ? (bool)$settings['use_template'] : true,
-            'custom_code' => wp_kses($settings['custom_code'] ?? '', array(
-                'script' => array(
-                    'type' => array(),
-                    'src' => array(),
-                    'async' => array(),
-                    'defer' => array(),
-                    'id' => array(),
-                    'class' => array()
-                ),
-                'noscript' => array(),
-                'img' => array(
-                    'src' => array(),
-                    'alt' => array(),
-                    'width' => array(),
-                    'height' => array(),
-                    'style' => array()
-                ),
-                'iframe' => array(
-                    'src' => array(),
-                    'width' => array(),
-                    'height' => array(),
-                    'style' => array()
-                )
-            )),
-            'position' => sanitize_text_field($settings['position'] ?? 'head'),
-            'priority' => intval($settings['priority'] ?? 10),
-            'device' => sanitize_text_field($settings['device'] ?? 'all'),
-            'conditions' => is_array($settings['conditions'] ?? array()) ? $settings['conditions'] : array(),
+            'custom_code' => $this->sanitize_custom_code($settings['custom_code'] ?? ''),
+            'position' => $this->sanitize_position($settings['position'] ?? 'head'),
+            'priority' => $this->sanitize_priority($settings['priority'] ?? 10),
+            'device' => $this->sanitize_device($settings['device'] ?? 'all'),
+            'conditions' => $this->sanitize_conditions($settings['conditions'] ?? array()),
             'updated_at' => current_time('mysql')
         );
         
-        foreach ($this->services_config as $service_key => $service_config) {
+        if ($service_config && isset($service_config['field'])) {
             $field_key = $service_config['field'];
-            if (isset($settings[$field_key])) {
-                $sanitized[$field_key] = sanitize_text_field($settings[$field_key]);
+            $sanitized[$field_key] = sanitize_text_field($settings[$field_key] ?? '');
+        }
+        
+        if (isset($settings['created_at'])) {
+            $sanitized['created_at'] = sanitize_text_field($settings['created_at']);
+        }
+        
+        return apply_filters('wptag_sanitize_service_settings', $sanitized, $service_key, $settings);
+    }
+
+    private function get_allowed_html() {
+        return array(
+            'script' => array(
+                'type' => array(),
+                'src' => array(),
+                'async' => array(),
+                'defer' => array(),
+                'id' => array(),
+                'class' => array(),
+                'crossorigin' => array(),
+                'integrity' => array()
+            ),
+            'noscript' => array(),
+            'img' => array(
+                'src' => array(),
+                'alt' => array(),
+                'width' => array(),
+                'height' => array(),
+                'style' => array()
+            ),
+            'iframe' => array(
+                'src' => array(),
+                'width' => array(),
+                'height' => array(),
+                'style' => array(),
+                'frameborder' => array()
+            )
+        );
+    }
+
+    private function sanitize_position($position) {
+        $valid_positions = array('head', 'body', 'footer');
+        return in_array($position, $valid_positions) ? $position : 'head';
+    }
+
+    private function sanitize_priority($priority) {
+        $priority = intval($priority);
+        return ($priority >= 1 && $priority <= 100) ? $priority : 10;
+    }
+
+    private function sanitize_device($device) {
+        $valid_devices = array('all', 'desktop', 'mobile');
+        return in_array($device, $valid_devices) ? $device : 'all';
+    }
+
+    private function sanitize_conditions($conditions) {
+        if (!is_array($conditions)) {
+            return array();
+        }
+        
+        $sanitized = array();
+        foreach ($conditions as $condition) {
+            if (is_array($condition)) {
+                $sanitized[] = array(
+                    'type' => sanitize_text_field($condition['type'] ?? ''),
+                    'operator' => sanitize_text_field($condition['operator'] ?? 'is'),
+                    'value' => sanitize_text_field($condition['value'] ?? '')
+                );
             }
         }
         
         return $sanitized;
     }
 
-    public function install_default_settings() {
-        $existing_settings = get_option($this->option_name, array());
-        $existing_services = get_option($this->services_option, array());
-        
-        if (empty($existing_settings)) {
-            add_option($this->option_name, $this->get_default_settings());
+    private function sanitize_custom_code($custom_code) {
+        if (empty($custom_code)) {
+            return '';
         }
         
-        if (empty($existing_services)) {
+        $custom_code = stripslashes($custom_code);
+        
+        $custom_code = wp_check_invalid_utf8($custom_code);
+        
+        $allowed_tags = array(
+            'script' => array(
+                'type' => array(),
+                'src' => array(),
+                'async' => array(),
+                'defer' => array(),
+                'id' => array(),
+                'class' => array(),
+                'crossorigin' => array(),
+                'integrity' => array(),
+                'charset' => array()
+            ),
+            'noscript' => array(),
+            'img' => array(
+                'src' => array(),
+                'alt' => array(),
+                'width' => array(),
+                'height' => array(),
+                'style' => array(),
+                'border' => array()
+            ),
+            'iframe' => array(
+                'src' => array(),
+                'width' => array(),
+                'height' => array(),
+                'style' => array(),
+                'frameborder' => array(),
+                'scrolling' => array(),
+                'marginheight' => array(),
+                'marginwidth' => array()
+            ),
+            'div' => array(
+                'id' => array(),
+                'class' => array(),
+                'style' => array()
+            ),
+            'span' => array(
+                'id' => array(),
+                'class' => array(),
+                'style' => array()
+            )
+        );
+        
+        if (!current_user_can('unfiltered_html')) {
+            $custom_code = wp_kses($custom_code, $allowed_tags);
+        }
+        
+        $custom_code = $this->remove_dangerous_patterns($custom_code);
+        
+        return trim($custom_code);
+    }
+
+    private function remove_dangerous_patterns($code) {
+        $dangerous_patterns = array(
+            '/<script[^>]*>\s*eval\s*\(/i',
+            '/<script[^>]*>\s*Function\s*\(/i',
+            '/javascript\s*:\s*void/i',
+            '/data:text\/html/i',
+            '/vbscript:/i'
+        );
+        
+        foreach ($dangerous_patterns as $pattern) {
+            $code = preg_replace($pattern, '', $code);
+        }
+        
+        $code = preg_replace_callback(
+            '/<script[^>]*>(.*?)<\/script>/is',
+            function($matches) {
+                $script_content = $matches[1];
+                
+                $blocked_functions = array(
+                    'eval(',
+                    'Function(',
+                    'execScript(',
+                    'setTimeout("',
+                    "setTimeout('",
+                    'setInterval("',
+                    "setInterval('",
+                    'document.write(',
+                    'document.writeln(',
+                    'window.location=',
+                    'location.href=',
+                    'location.replace('
+                );
+                
+                foreach ($blocked_functions as $blocked) {
+                    if (stripos($script_content, $blocked) !== false) {
+                        return '<!-- Blocked potentially dangerous script -->';
+                    }
+                }
+                
+                return $matches[0];
+            },
+            $code
+        );
+        
+        return $code;
+    }
+
+    public function install_default_settings() {
+        $existing_settings = get_option($this->option_name);
+        $existing_services = get_option($this->services_option);
+        
+        if (false === $existing_settings) {
+            $default_settings = array();
+            $default_services = array('google_analytics', 'google_tag_manager', 'facebook_pixel', 'google_ads');
+            
+            foreach ($default_services as $service_key) {
+                $default_settings[$service_key] = $this->get_default_service_settings($service_key);
+            }
+            
+            add_option($this->option_name, $default_settings);
+        }
+        
+        if (false === $existing_services) {
             add_option($this->services_option, array('google_analytics', 'google_tag_manager', 'facebook_pixel', 'google_ads'));
         }
+        
+        do_action('wptag_settings_installed');
     }
 
     public function reset_to_defaults() {
         delete_option($this->option_name);
         delete_option($this->services_option);
+        
         $this->cached_settings = null;
         $this->cached_services = null;
+        
+        wp_cache_delete('wptag_available_services', 'wptag');
+        
         $this->install_default_settings();
         
         do_action('wptag_settings_reset');
+        
+        return true;
     }
 
     public function export_settings() {
@@ -417,31 +642,133 @@ class Config {
         $export_data = array(
             'version' => WPTAG_VERSION,
             'exported_at' => current_time('mysql'),
+            'site_url' => get_site_url(),
             'services' => $services,
-            'settings' => $settings
+            'settings' => $settings,
+            'plugin_info' => array(
+                'name' => 'WPTag',
+                'version' => WPTAG_VERSION,
+                'wordpress_version' => get_bloginfo('version'),
+                'php_version' => PHP_VERSION
+            )
         );
         
-        return wp_json_encode($export_data, JSON_PRETTY_PRINT);
+        return wp_json_encode($export_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     }
 
     public function import_settings($json_data) {
         $data = json_decode($json_data, true);
         
-        if (!is_array($data) || !isset($data['settings'])) {
-            return new \WP_Error('invalid_data', 'Invalid import data format');
+        if (!is_array($data)) {
+            return new \WP_Error('invalid_json', 'Invalid JSON format');
+        }
+        
+        if (!isset($data['settings']) || !is_array($data['settings'])) {
+            return new \WP_Error('invalid_data', 'Invalid import data format - missing settings');
+        }
+        
+        if (isset($data['version'])) {
+            $compatibility_check = $this->check_version_compatibility($data['version']);
+            if (is_wp_error($compatibility_check)) {
+                return $compatibility_check;
+            }
+        }
+        
+        $settings_result = false;
+        $services_result = false;
+        
+        if (isset($data['services']) && is_array($data['services'])) {
+            $services_result = $this->update_enabled_services($data['services']);
         }
         
         $settings_result = $this->update_settings($data['settings']);
         
-        if (isset($data['services'])) {
-            $services_result = $this->update_enabled_services($data['services']);
-        }
-        
         if ($settings_result) {
-            do_action('wptag_settings_imported', $data['settings']);
+            do_action('wptag_settings_imported', $data);
             return true;
         }
         
         return new \WP_Error('import_failed', 'Failed to import settings');
+    }
+
+    private function check_version_compatibility($import_version) {
+        $current_version = WPTAG_VERSION;
+        
+        if (version_compare($import_version, $current_version, '>')) {
+            return new \WP_Error('version_incompatible', 'Import data is from a newer version (' . $import_version . ') and may not be compatible with the current version (' . $current_version . ')');
+        }
+        
+        $min_compatible_version = '1.0.0';
+        if (version_compare($import_version, $min_compatible_version, '<')) {
+            return new \WP_Error('version_too_old', 'Import data is from an incompatible version (' . $import_version . '). Minimum supported version is ' . $min_compatible_version);
+        }
+        
+        return true;
+    }
+
+    public function get_plugin_stats() {
+        $settings = $this->get_settings();
+        $enabled_services = $this->get_enabled_services();
+        
+        $stats = array(
+            'total_services' => count($this->services_config),
+            'enabled_services' => count($enabled_services),
+            'active_codes' => 0,
+            'categories' => array(),
+            'last_updated' => ''
+        );
+        
+        foreach ($settings as $service_key => $service_settings) {
+            if (!empty($service_settings['enabled'])) {
+                $stats['active_codes']++;
+            }
+            
+            if (!empty($service_settings['updated_at'])) {
+                if (empty($stats['last_updated']) || $service_settings['updated_at'] > $stats['last_updated']) {
+                    $stats['last_updated'] = $service_settings['updated_at'];
+                }
+            }
+        }
+        
+        $available_services = $this->get_available_services();
+        foreach ($available_services as $service_key => $service_config) {
+            $category = $service_config['category'];
+            if (!isset($stats['categories'][$category])) {
+                $stats['categories'][$category] = 0;
+            }
+            $stats['categories'][$category]++;
+        }
+        
+        return $stats;
+    }
+
+    public function cleanup_orphaned_settings() {
+        $settings = get_option($this->option_name, array());
+        $enabled_services = $this->get_enabled_services();
+        
+        $cleaned_settings = array();
+        foreach ($settings as $service_key => $service_settings) {
+            if (in_array($service_key, $enabled_services) && isset($this->services_config[$service_key])) {
+                $cleaned_settings[$service_key] = $service_settings;
+            }
+        }
+        
+        if (count($cleaned_settings) !== count($settings)) {
+            update_option($this->option_name, $cleaned_settings);
+            $this->cached_settings = null;
+            return true;
+        }
+        
+        return false;
+    }
+
+    public function migrate_settings($from_version) {
+        do_action('wptag_before_settings_migration', $from_version, WPTAG_VERSION);
+        
+        $migrated = false;
+        
+        do_action('wptag_after_settings_migration', $from_version, WPTAG_VERSION, $migrated);
+        
+        return $migrated;
     }
 }

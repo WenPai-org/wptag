@@ -3,7 +3,7 @@
  * Plugin Name: WPTag
  * Plugin URI: https://wptag.com
  * Description: Professional tracking codes and analytics management plugin for WordPress
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: WPTag.com
  * Author URI: https://wptag.com
  * Text Domain: wptag
@@ -74,6 +74,7 @@ final class WPTag {
         
         add_action('init', array($this, 'init'), 0);
         add_action('plugins_loaded', array($this, 'plugins_loaded'));
+        add_action('wptag_clear_cache', array($this, 'clear_all_cache'));
     }
 
     public function activate() {
@@ -103,6 +104,16 @@ final class WPTag {
 
     public function get_version() {
         return WPTAG_VERSION;
+    }
+
+    public function clear_all_cache() {
+        if ($this->frontend) {
+            $this->frontend->clear_cache();
+        }
+        
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_flush();
+        }
     }
 }
 
