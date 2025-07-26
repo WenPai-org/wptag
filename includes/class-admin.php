@@ -159,15 +159,12 @@ class Admin {
                 <div class="wptag-header-actions">
                     <?php if ($this->current_user_can_manage_codes()): ?>
                         <button type="button" class="button" id="wptag-export-btn">
-                            <span class="dashicons dashicons-download"></span>
                             Export Settings
                         </button>
                         <button type="button" class="button" id="wptag-import-btn">
-                            <span class="dashicons dashicons-upload"></span>
                             Import Settings
                         </button>
                         <button type="button" class="button button-secondary" id="wptag-reset-btn">
-                            <span class="dashicons dashicons-admin-generic"></span>
                             Reset All
                         </button>
                     <?php endif; ?>
@@ -179,7 +176,6 @@ class Admin {
                     <a href="?page=wptag-settings&tab=<?php echo esc_attr($category_key); ?>" 
                        class="nav-tab <?php echo $active_tab === $category_key ? 'nav-tab-active' : ''; ?>"
                        data-tab="<?php echo esc_attr($category_key); ?>">
-                        <span class="dashicons dashicons-chart-area"></span>
                         <?php echo esc_html(ucfirst($category_key)); ?>
                         <span class="count">(<?php echo count($category_data['services']); ?>)</span>
                     </a>
@@ -188,7 +184,6 @@ class Admin {
                     <a href="?page=wptag-settings&tab=services" 
                        class="nav-tab <?php echo $active_tab === 'services' ? 'nav-tab-active' : ''; ?>"
                        data-tab="services">
-                        <span class="dashicons dashicons-admin-settings"></span>
                         Services Management
                     </a>
                 <?php endif; ?>
