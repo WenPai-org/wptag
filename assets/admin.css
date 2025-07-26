@@ -144,7 +144,15 @@ button.button.wptag-validate-btn, button.button.wptag-preview-btn {
 .wptag-service-card.disabled .wptag-service-content {
     pointer-events: none;
 }
-
+.wptag-service-card.disabled .wptag-radio-group {
+    display: none;
+}
+.wptag-service-card.disabled .wptag-field-help {
+    display: none;
+}
+.wptag-service-card.disabled .wptag-advanced-toggle {
+    display: none;
+}
 .wptag-service-header {
     display: flex;
     align-items: center;
@@ -238,7 +246,7 @@ input:focus + .wptag-slider {
 }
 
 .wptag-service-content {
-    padding: 25px;
+    padding: 30px;
 }
 
 .wptag-form-row {
